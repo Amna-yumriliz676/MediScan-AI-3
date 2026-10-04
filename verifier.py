@@ -1,74 +1,94 @@
 """
-MediScan AI - Medicine Verifier (Barcode + Image)
+MediScan AI - Medicine Verifier (Image-based only)
 """
-from database import find_medicine_by_barcode, find_medicine_by_name
+from database import MEDICINES
 
 
-def verify_by_barcode(barcode: str):
-    if not barcode or not barcode.strip():
-        return {"status": "INVALID", "message": "Please enter a barcode.", "medicine": None}
-
-    medicine = find_medicine_by_barcode(barcode.strip())
-
-    if medicine:
+def verify_by_image_match(detected_medicines: list):
+    """
+    Given medicines detected from image, check if they're in our verified database.
+    Returns per-medicine verification.
+    """
+    if not detected_medicines:
         return {
-            "status": "GENUINE",
-            "message": f"✅ Verified! This is {medicine['name']} by {medicine['manufacturer']}.",
-            "medicine": medicine,
-            "confidence": 0.95,
-            "checks": [
-                "Barcode registered in database",
-                f"Manufacturer verified: {medicine['manufacturer']}",
-                f"DRAP approved price: {medicine['price']}",
-            ]
+            "status": "UNKNOWN",
+            "message": "Could not detect any medicine from image.",
+            "results": [],
+            "has_fake": False,
         }
+
+    results = []
+    has_fake = False
+
+    for m in detected_medicines:
+        med_name = m["medicine"]
+        # Find in database
+        found = None
+        for db_med in MEDICINES:
+            if db_med["name"].lower() == med_name.lower():
+                found = db_med
+                break
+
+        if found:
+            results.append({
+                "medicine": found["name"],
+                "status": "GENUINE",
+                "manufacturer": found["manufacturer"],
+                "barcode": found["barcode"],
+                "price": found["price"],
+                "category": found["category"],
+                "dosage": found["dosage"],
+                "confidence": m["confidence"],
+            })
+        else:
+            has_fake = True
+            results.append({
+                "medicine": med_name,
+                "status": "SUSPICIOUS",
+                "manufacturer": "Unknown",
+                "barcode": "-",
+                "price": "-",
+                "category": "-",
+                "dosage": "-",
+                "confidence": m["confidence"],
+            })
+
     return {
-        "status": "SUSPICIOUS",
-        "message": "⚠️ Barcode not found in our verified database. Could be fake or unregistered.",
-        "medicine": None,
-        "confidence": 0.70,
-        "checks": [
-            "❌ Barcode not registered",
-            "Recommendation: Do NOT use",
-            "Report to DRAP: drap.gov.pk",
-        ]
-    }
-
-
-def verify_by_name(name: str):
-    if not name or not name.strip():
-        return {"status": "INVALID", "message": "Please enter a medicine name.", "medicine": None}
-
-    medicine = find_medicine_by_name(name.strip())
-
-    if medicine:
-        return {
-            "status": "GENUINE",
-            "message": f"✅ Verified! {medicine['name']} — {medicine['manufacturer']}.",
-            "medicine": medicine,
-            "confidence": 0.95,
-            "checks": [
-                "Medicine registered",
-                f"Manufacturer: {medicine['manufacturer']}",
-                f"Approved price: {medicine['price']}",
-            ]
-        }
-    return {
-        "status": "SUSPICIOUS",
-        "message": "⚠️ Medicine not found in our database. May not be registered in Pakistan.",
-        "medicine": None,
-        "confidence": 0.60,
-        "checks": ["❌ Not found in database", "Verify with pharmacist"]
+        "status": "COMPLETE",
+        "results": results,
+        "has_fake": has_fake,
     }
 
 
 def get_verification_checklist():
+    """Professional visual verification checklist."""
     return [
-        "Check the hologram on the packaging",
-        "Verify batch number and expiry date",
-        "Compare font and colors with official packaging",
-        "Check for spelling mistakes on label",
-        "Verify the seal is intact",
-        "Check if price matches DRAP rate",
-        "Look for DRAP registration number",
+        {
+            "title": "Hologram Check",
+            "desc": "Look for the holographic seal on the packaging — should shift colors when tilted"
+        },
+        {
+            "title": "Batch & Expiry",
+            "desc": "Both should be clearly printed (not stickers). Check if not expired"
+        },
+        {
+            "title": "Font Consistency",
+            "desc": "Compare font style with manufacturer's official packaging"
+        },
+        {
+            "title": "Spelling Check",
+            "desc": "Misspelled brand names are a common sign of fakes"
+        },
+        {
+            "title": "Seal Integrity",
+            "desc": "The medicine seal should be intact, not tampered with"
+        },
+        {
+            "title": "Price Verification",
+            "desc": "If price is far below DRAP rate, it may be fake"
+        },
+        {
+            "title": "DRAP Registration",
+            "desc": "Look for a valid DRAP registration number on the pack"
+        },
     ]

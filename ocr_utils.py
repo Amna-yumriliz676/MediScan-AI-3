@@ -1,5 +1,6 @@
 """
-MediScan AI - Prescription OCR + Clean Format
+MediScan AI - Prescription OCR (Improved)
+ONLY extracts medicine names — filters out names, dates, addresses.
 """
 
 import streamlit as st
@@ -7,7 +8,24 @@ from PIL import Image
 import pytesseract
 import re
 from difflib import SequenceMatcher
-from database import MEDICINES, get_all_medicine_names
+from database import MEDICINES
+
+
+# Words that should NEVER be treated as medicines
+STOP_WORDS = {
+    "prescription", "doctor", "name", "patient", "address", "date",
+    "clinic", "hospital", "medical", "rx", "age", "sex", "male",
+    "female", "signature", "sign", "consultant", "dr", "street",
+    "road", "city", "phone", "mobile", "email", "registration",
+    "diagnosis", "complaint", "history", "examination", "advice",
+    "follow", "review", "your", "take", "tablet", "capsule", "daily",
+    "times", "day", "morning", "evening", "night", "after", "before",
+    "meal", "food", "needed", "pain", "one", "two", "three", "four",
+    "five", "mg", "ml", "mcg", "gm", "kg", "us", "lb", "the", "and",
+    "for", "with", "from", "this", "that", "have", "has", "been",
+    "will", "would", "could", "should", "may", "might", "must",
+    "el", "springfield", "doe", "john", "smith", "your", "clinic",
+}
 
 
 @st.cache_data(show_spinner=False)
@@ -26,92 +44,87 @@ def _similarity(a: str, b: str) -> float:
 
 
 def extract_medicine_names(text: str):
-    """Extract medicine names using fuzzy matching + confidence scoring."""
+    """
+    Extract ONLY medicine names from OCR text.
+    Filters out common non-medicine words (names, dates, addresses).
+    """
     if not text or "OCR_ERROR" in text:
         return []
 
-    text_lower = text.lower()
-    words = re.findall(r'\b[a-zA-Z]{4,}\b', text)
     found = {}
 
+    # Get all valid medicine names + generics
+    valid_meds = []
     for med in MEDICINES:
-        med_name = med["name"].lower()
-        generic = med["generic"].lower().split()[0]
+        valid_meds.append((med["name"].lower(), med))
+        # Also add generic first word
+        generic_first = med["generic"].lower().split()[0]
+        if len(generic_first) >= 4:
+            valid_meds.append((generic_first, med))
 
-        # Exact match
-        if med_name in text_lower or generic in text_lower:
-            found[med["name"]] = {
-                "medicine": med["name"],
-                "generic": med["generic"],
-                "confidence": 0.95,
-                "matched_text": med["name"] if med_name in text_lower else med["generic"]
-            }
+    # Tokenize text into words (remove digits, punctuation)
+    words = re.findall(r'\b[a-zA-Z]{4,}\b', text)
+
+    for word in words:
+        word_lower = word.lower()
+
+        # Skip stop words
+        if word_lower in STOP_WORDS:
             continue
 
-        # Fuzzy match — best word similarity
-        best_score = 0
-        best_word = ""
-        for word in words:
-            score = max(_similarity(word, med["name"]), _similarity(word, med["generic"].split()[0]))
-            if score > best_score:
-                best_score = score
-                best_word = word
+        # Match against valid medicines
+        for med_key, med in valid_meds:
+            if med["name"] in found:
+                continue
 
-        if best_score >= 0.75:
-            found[med["name"]] = {
-                "medicine": med["name"],
-                "generic": med["generic"],
-                "confidence": round(best_score, 2),
-                "matched_text": best_word
-            }
+            # Exact match
+            if word_lower == med_key:
+                found[med["name"]] = {
+                    "medicine": med["name"],
+                    "generic": med["generic"],
+                    "confidence": 0.95,
+                }
+                break
+
+            # Fuzzy match (high threshold to avoid false positives)
+            score = _similarity(word_lower, med_key)
+            if score >= 0.85:
+                found[med["name"]] = {
+                    "medicine": med["name"],
+                    "generic": med["generic"],
+                    "confidence": round(score, 2),
+                }
+                break
 
     return list(found.values())
 
 
-def suggest_alternatives(word: str, top_k=3):
-    """Suggest similar medicine names."""
-    scores = []
-    for med in MEDICINES:
-        sim = max(
-            _similarity(word, med["name"]),
-            _similarity(word, med["generic"].split()[0])
-        )
-        scores.append((med["name"], round(sim, 2)))
-    scores.sort(key=lambda x: -x[1])
-    return scores[:top_k]
-
-
-def format_prescription(medicines_found: list, raw_text: str) -> str:
+def format_prescription(medicines_found: list) -> str:
     """Format extracted medicines into clean readable text."""
     lines = []
-    lines.append("=" * 50)
+    lines.append("=" * 55)
     lines.append("       MEDISCAN AI — PRESCRIPTION REPORT")
-    lines.append("=" * 50)
+    lines.append("=" * 55)
     lines.append("")
-    lines.append(f"Total Medicines Detected: {len(medicines_found)}")
+    lines.append(f"Medicines Detected: {len(medicines_found)}")
     lines.append("")
-    lines.append("-" * 50)
-    lines.append("MEDICINES:")
-    lines.append("-" * 50)
+    lines.append("-" * 55)
 
     if not medicines_found:
-        lines.append("  No medicines detected. Prescription may be unclear.")
+        lines.append("  No medicines detected.")
+        lines.append("  Prescription may be unclear.")
     else:
         for i, m in enumerate(medicines_found, 1):
-            lines.append(f"\n{i}. {m['medicine']}")
-            lines.append(f"   Generic:    {m['generic']}")
-            lines.append(f"   Confidence: {m['confidence'] * 100:.0f}%")
-            lines.append(f"   Matched:    {m['matched_text']}")
+            lines.append("")
+            lines.append(f"  {i}. {m['medicine'].upper()}")
+            lines.append(f"     Generic:    {m['generic']}")
+            lines.append(f"     Confidence: {m['confidence'] * 100:.0f}%")
 
     lines.append("")
-    lines.append("-" * 50)
-    lines.append("RAW OCR TEXT:")
-    lines.append("-" * 50)
-    lines.append(raw_text if raw_text else "N/A")
-    lines.append("")
-    lines.append("=" * 50)
-    lines.append("Generated by MediScan AI — Educational use only")
-    lines.append("Consult a licensed doctor before taking any medicine.")
-    lines.append("=" * 50)
+    lines.append("-" * 55)
+    lines.append("Generated by MediScan AI")
+    lines.append("Educational purposes only.")
+    lines.append("Consult a licensed doctor before use.")
+    lines.append("=" * 55)
 
     return "\n".join(lines)

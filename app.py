@@ -1,6 +1,6 @@
 """
-MediScan AI — Complete App
-4 Features + Dashboard + Complaint System
+MediScan AI — Redesigned
+Premium UI · English labels · Image-based verifier
 """
 import streamlit as st
 import pandas as pd
@@ -8,14 +8,13 @@ from PIL import Image
 from datetime import datetime
 
 from database import (
-    MEDICINES, INTERACTIONS, SYMPTOMS,
-    search_medicine, check_interaction,
-    get_all_medicine_names, get_otc_medicines,
+    MEDICINES, search_medicine,
+    get_all_medicine_names,
 )
 from ocr_utils import (
     extract_text_from_image, extract_medicine_names, format_prescription,
 )
-from verifier import verify_by_barcode, verify_by_name, get_verification_checklist
+from verifier import verify_by_image_match, get_verification_checklist
 from symptom_checker import suggest_medicines
 from complaints import (
     init_complaints, file_complaint, add_comment,
@@ -34,181 +33,356 @@ init_complaints()
 
 
 # ============================================================
-# CSS
+# CSS — MIDNIGHT TEAL PREMIUM THEME
 # ============================================================
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-    html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
-    #MainMenu, footer, header {visibility: hidden;}
-    .block-container { padding: 1.5rem 2rem; max-width: 100%; }
-    .stApp { background: #f7f8fc; }
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap');
 
-    /* SIDEBAR */
-    [data-testid="stSidebar"] {
-        background: #0f172a;
-        min-width: 270px !important;
-        max-width: 270px !important;
+    * { font-family: 'Inter', -apple-system, sans-serif; }
+    #MainMenu, footer, header {visibility: hidden;}
+    .block-container { padding: 1.5rem 2rem 3rem 2rem; max-width: 100%; }
+
+    /* ============ BACKGROUND ============ */
+    .stApp {
+        background: #f4f6fb;
+        background-image:
+            radial-gradient(at 0% 0%, rgba(13, 148, 136, 0.06) 0px, transparent 40%),
+            radial-gradient(at 100% 0%, rgba(59, 130, 246, 0.05) 0px, transparent 40%);
     }
-    [data-testid="stSidebar"] * { color: #cbd5e1 !important; }
+
+    /* ============ SIDEBAR ============ */
+    [data-testid="stSidebar"] {
+        background: #0a1929;
+        min-width: 280px !important;
+        max-width: 280px !important;
+        border-right: 1px solid rgba(255,255,255,0.05);
+    }
+    [data-testid="stSidebar"] * { color: #94a3b8 !important; }
     [data-testid="stSidebar"] .stRadio > label { display: none; }
-    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] { gap: 4px; }
+    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] { gap: 6px; }
     [data-testid="stSidebar"] .stRadio div[role="radiogroup"] > label {
-        background: transparent; padding: 10px 16px; border-radius: 10px;
-        cursor: pointer; transition: all 0.2s; font-weight: 500;
-        font-size: 0.88rem; width: 100%; border: none;
+        background: transparent;
+        padding: 11px 16px;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: all 0.25s ease;
+        font-weight: 500;
+        font-size: 0.88rem;
+        width: 100%;
+        border: 1px solid transparent;
     }
     [data-testid="stSidebar"] .stRadio div[role="radiogroup"] > label:hover {
-        background: rgba(255,255,255,0.06) !important;
+        background: rgba(13, 148, 136, 0.08) !important;
+        border-color: rgba(13, 148, 136, 0.2);
     }
     [data-testid="stSidebar"] .stRadio div[role="radiogroup"] > label:has(input:checked) {
-        background: linear-gradient(135deg, #10b981, #06b6d4) !important;
-        box-shadow: 0 4px 12px rgba(16,185,129,0.35);
+        background: linear-gradient(135deg, rgba(13, 148, 136, 0.9), rgba(6, 182, 212, 0.9)) !important;
+        box-shadow: 0 4px 16px rgba(13, 148, 136, 0.4);
     }
     [data-testid="stSidebar"] .stRadio div[role="radiogroup"] > label:has(input:checked) * {
         color: #ffffff !important;
+        font-weight: 600 !important;
     }
     [data-testid="stSidebar"] .stRadio input[type="radio"] { display: none; }
     [data-testid="stSidebar"] .stRadio div[role="radiogroup"] > label > div:first-child {
         display: none;
     }
 
-    /* BRAND */
-    .brand { display: flex; align-items: center; gap: 0.7rem;
-        padding: 1rem 0.5rem 1.5rem 0.5rem;
-        border-bottom: 1px solid rgba(255,255,255,0.08); margin-bottom: 1rem; }
-    .brand-logo { width: 42px; height: 42px;
-        background: linear-gradient(135deg, #10b981, #06b6d4);
-        border-radius: 12px; display: flex; align-items: center;
-        justify-content: center; font-size: 1.3rem;
-        box-shadow: 0 4px 12px rgba(16,185,129,0.4); }
-    .brand-name { font-weight: 800; font-size: 1.1rem; color: #fff !important; }
-    .brand-sub { font-size: 0.68rem; color: #10b981 !important;
-        font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
-
-    /* PAGE HEADER */
-    .page-header { margin-bottom: 1.5rem; }
-    .page-title { font-size: 1.7rem; font-weight: 800; color: #0f172a;
-        letter-spacing: -0.6px; margin: 0; }
-    .page-sub { font-size: 0.88rem; color: #64748b; margin-top: 0.3rem; }
-
-    /* HERO */
-    .hero {
-        background: linear-gradient(135deg, #10b981 0%, #06b6d4 100%);
-        padding: 1.8rem 2rem; border-radius: 18px; color: white;
-        margin-bottom: 1.5rem;
-        box-shadow: 0 15px 35px -15px rgba(16,185,129,0.4);
-        position: relative; overflow: hidden;
+    /* ============ BRAND ============ */
+    .brand {
+        display: flex; align-items: center; gap: 0.85rem;
+        padding: 0.5rem 0.2rem 1.5rem 0.2rem;
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+        margin-bottom: 1.2rem;
     }
-    .hero::before { content: ""; position: absolute; top: -50%; right: -10%;
-        width: 300px; height: 300px;
-        background: radial-gradient(circle, rgba(255,255,255,0.15), transparent 70%);
-        border-radius: 50%; }
-    .hero h1 { font-size: 1.8rem; font-weight: 800; margin: 0 0 0.4rem 0;
-        letter-spacing: -0.5px; position: relative; }
-    .hero p { font-size: 0.95rem; opacity: 0.95; margin: 0; position: relative; }
-
-    /* CARD */
-    .card { background: white; border: 1px solid #e2e8f0;
-        border-radius: 14px; padding: 1.2rem 1.3rem;
-        margin-bottom: 1rem; transition: all 0.2s; }
-    .card:hover { box-shadow: 0 8px 20px -10px rgba(0,0,0,0.1);
-        border-color: #cbd5e1; }
-
-    /* KPI */
-    .kpi-card { background: white; padding: 1.2rem 1.3rem;
-        border-radius: 14px; border: 1px solid #eef0f4;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.03); height: 100%; }
-    .kpi-icon { width: 42px; height: 42px; border-radius: 12px;
+    .brand-logo {
+        width: 46px; height: 46px;
+        background: linear-gradient(135deg, #0d9488, #06b6d4);
+        border-radius: 14px;
         display: flex; align-items: center; justify-content: center;
-        font-size: 1.2rem; margin-bottom: 0.8rem; }
-    .kpi-icon.green { background: #d1fae5; }
+        font-size: 1.5rem;
+        box-shadow: 0 8px 24px rgba(13, 148, 136, 0.4);
+    }
+    .brand-name {
+        font-family: 'Space Grotesk', sans-serif;
+        font-weight: 700; font-size: 1.15rem; color: #ffffff !important;
+        letter-spacing: -0.3px;
+    }
+    .brand-sub {
+        font-size: 0.65rem; color: #14b8a6 !important;
+        font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px;
+        margin-top: 1px;
+    }
+
+    /* ============ PAGE HEADER ============ */
+    .page-head { margin-bottom: 2rem; }
+    .page-eyebrow {
+        font-size: 0.72rem; color: #0d9488; font-weight: 700;
+        letter-spacing: 2px; text-transform: uppercase; margin-bottom: 0.4rem;
+    }
+    .page-title {
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 2rem; font-weight: 700; color: #0f172a;
+        letter-spacing: -0.8px; margin: 0; line-height: 1.1;
+    }
+    .page-desc {
+        font-size: 0.92rem; color: #64748b; margin-top: 0.5rem;
+    }
+
+    /* ============ HERO ============ */
+    .hero {
+        background: linear-gradient(135deg, #0d9488 0%, #06b6d4 100%);
+        padding: 2rem 2.2rem;
+        border-radius: 20px;
+        color: white;
+        margin-bottom: 2rem;
+        box-shadow: 0 20px 40px -20px rgba(13, 148, 136, 0.5);
+        position: relative;
+        overflow: hidden;
+    }
+    .hero::before {
+        content: ""; position: absolute; top: -50%; right: -10%;
+        width: 400px; height: 400px;
+        background: radial-gradient(circle, rgba(255,255,255,0.15), transparent 70%);
+        border-radius: 50%;
+    }
+    .hero-content { position: relative; z-index: 2; }
+    .hero h1 {
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 1.9rem; font-weight: 700;
+        margin: 0 0 0.5rem 0; letter-spacing: -0.6px;
+    }
+    .hero p { font-size: 1rem; opacity: 0.95; margin: 0; }
+
+    /* ============ KPI CARDS ============ */
+    .kpi {
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+        padding: 1.3rem 1.4rem;
+        transition: all 0.25s ease;
+        height: 100%;
+        position: relative;
+        overflow: hidden;
+    }
+    .kpi::before {
+        content: ""; position: absolute; top: 0; left: 0;
+        width: 4px; height: 100%; background: #0d9488;
+    }
+    .kpi.blue::before { background: #3b82f6; }
+    .kpi.orange::before { background: #f59e0b; }
+    .kpi.purple::before { background: #8b5cf6; }
+    .kpi:hover {
+        border-color: #cbd5e1;
+        transform: translateY(-2px);
+        box-shadow: 0 12px 28px -10px rgba(0,0,0,0.12);
+    }
+    .kpi-icon {
+        width: 44px; height: 44px; border-radius: 12px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.3rem; margin-bottom: 1rem;
+    }
+    .kpi-icon.teal { background: #ccfbf1; }
     .kpi-icon.blue { background: #dbeafe; }
     .kpi-icon.orange { background: #ffedd5; }
-    .kpi-icon.purple { background: #f3e8ff; }
-    .kpi-icon.red { background: #fee2e2; }
-    .kpi-label { font-size: 0.75rem; color: #64748b; font-weight: 600;
-        text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.3rem; }
-    .kpi-value { font-size: 1.6rem; font-weight: 800;
-        color: #0f172a; line-height: 1.1; }
+    .kpi-icon.purple { background: #ede9fe; }
+    .kpi-label {
+        font-size: 0.75rem; color: #64748b; font-weight: 700;
+        text-transform: uppercase; letter-spacing: 0.8px;
+        margin-bottom: 0.4rem;
+    }
+    .kpi-value {
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 2rem; font-weight: 700; color: #0f172a;
+        line-height: 1; letter-spacing: -0.5px;
+    }
+    .kpi-sub {
+        font-size: 0.72rem; color: #94a3b8; margin-top: 0.4rem;
+    }
 
-    /* SEVERITY */
-    .sev { display: inline-block; padding: 4px 12px;
+    /* ============ CARDS ============ */
+    .card {
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+        padding: 1.4rem 1.5rem;
+        margin-bottom: 1rem;
+        transition: all 0.2s;
+    }
+    .card:hover {
+        box-shadow: 0 10px 24px -12px rgba(0,0,0,0.1);
+        border-color: #cbd5e1;
+    }
+    .card-title {
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 1.05rem; font-weight: 600; color: #0f172a;
+        margin-bottom: 0.7rem;
+    }
+    .card-desc {
+        font-size: 0.88rem; color: #64748b; line-height: 1.5;
+    }
+
+    /* ============ QUICK ACTION ============ */
+    .action-card {
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+        padding: 1.5rem;
+        transition: all 0.25s ease;
+        height: 100%;
+    }
+    .action-card:hover {
+        border-color: #14b8a6;
+        transform: translateY(-3px);
+        box-shadow: 0 16px 32px -16px rgba(13, 148, 136, 0.3);
+    }
+    .action-title {
+        font-family: 'Space Grotesk', sans-serif;
+        font-size: 1.1rem; font-weight: 700; color: #0f172a;
+        margin: 0.7rem 0 0.5rem 0;
+    }
+    .action-desc {
+        font-size: 0.85rem; color: #64748b; line-height: 1.5;
+    }
+
+    /* ============ BADGES ============ */
+    .badge {
+        display: inline-block; padding: 4px 12px;
         border-radius: 20px; font-size: 0.72rem; font-weight: 700;
-        text-transform: uppercase; letter-spacing: 0.5px; }
-    .sev-severe { background: #fee2e2; color: #991b1b; }
-    .sev-moderate { background: #fef3c7; color: #92400e; }
-    .sev-safe { background: #d1fae5; color: #065f46; }
-    .sev-pending { background: #fef3c7; color: #92400e; }
-    .sev-resolved { background: #d1fae5; color: #065f46; }
+        text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .badge-genuine { background: #d1fae5; color: #065f46; }
+    .badge-suspicious { background: #fee2e2; color: #991b1b; }
+    .badge-pending { background: #fef3c7; color: #92400e; }
+    .badge-resolved { background: #d1fae5; color: #065f46; }
 
-    /* INFO ROWS */
-    .info-row { display: flex; padding: 0.6rem 0;
-        border-bottom: 1px solid #f1f5f9; font-size: 0.88rem; }
+    /* ============ INFO ROW ============ */
+    .info-row {
+        display: flex; padding: 0.7rem 0;
+        border-bottom: 1px solid #f1f5f9; font-size: 0.88rem;
+    }
     .info-row:last-child { border-bottom: none; }
-    .info-label { font-weight: 600; color: #64748b;
-        min-width: 140px; flex-shrink: 0; }
-    .info-value { color: #0f172a; flex: 1; }
+    .info-label {
+        font-weight: 600; color: #64748b;
+        min-width: 150px; flex-shrink: 0;
+    }
+    .info-value { color: #0f172a; flex: 1; font-weight: 500; }
 
-    /* BUTTONS */
+    /* ============ CHECKLIST ============ */
+    .checklist-item {
+        display: flex; gap: 1rem; padding: 1rem 0;
+        border-bottom: 1px solid #f1f5f9;
+    }
+    .checklist-item:last-child { border-bottom: none; }
+    .checklist-num {
+        width: 32px; height: 32px; border-radius: 10px;
+        background: #ccfbf1; color: #0d9488;
+        display: flex; align-items: center; justify-content: center;
+        font-weight: 800; font-size: 0.85rem; flex-shrink: 0;
+    }
+    .checklist-title {
+        font-weight: 700; color: #0f172a;
+        font-size: 0.92rem; margin-bottom: 0.2rem;
+    }
+    .checklist-desc {
+        font-size: 0.82rem; color: #64748b; line-height: 1.5;
+    }
+
+    /* ============ BUTTONS ============ */
     .stButton > button {
-        border-radius: 10px; font-weight: 600; font-size: 0.85rem;
-        padding: 0.5rem 1.1rem; transition: all 0.2s ease;
+        border-radius: 10px; font-weight: 600; font-size: 0.88rem;
+        padding: 0.55rem 1.2rem; transition: all 0.2s ease;
         border: 1px solid #e2e8f0; background: white; color: #334155;
     }
     .stButton > button:hover {
-        border-color: #a7f3d0; color: #10b981; transform: translateY(-1px);
+        border-color: #14b8a6; color: #0d9488;
+        transform: translateY(-1px);
     }
     .stButton > button[kind="primary"] {
-        background: linear-gradient(135deg, #10b981, #06b6d4);
+        background: linear-gradient(135deg, #0d9488, #06b6d4);
         border: none; color: white;
-        box-shadow: 0 4px 12px -4px rgba(16,185,129,0.5);
+        box-shadow: 0 6px 16px -6px rgba(13, 148, 136, 0.6);
     }
     .stButton > button[kind="primary"]:hover {
-        box-shadow: 0 8px 20px -6px rgba(16,185,129,0.6); color: white;
+        box-shadow: 0 10px 24px -8px rgba(13, 148, 136, 0.7);
+        color: white; transform: translateY(-1px);
     }
 
-    /* INPUTS */
+    /* ============ INPUTS ============ */
     .stTextInput input, .stTextArea textarea,
     .stSelectbox div[data-baseweb="select"] > div {
-        border-radius: 10px !important; border-color: #e2e8f0 !important;
-        font-size: 0.88rem !important;
+        border-radius: 10px !important;
+        border-color: #e2e8f0 !important;
+        font-size: 0.9rem !important;
+        padding: 0.6rem 0.9rem !important;
     }
     .stTextInput input:focus, .stTextArea textarea:focus {
-        border-color: #10b981 !important;
-        box-shadow: 0 0 0 3px rgba(16,185,129,0.1) !important;
+        border-color: #14b8a6 !important;
+        box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.1) !important;
+    }
+    .stTextInput label, .stSelectbox label, .stTextArea label {
+        font-size: 0.82rem !important;
+        font-weight: 600 !important;
+        color: #475569 !important;
     }
 
-    /* FILE UPLOADER */
+    /* ============ FILE UPLOADER ============ */
     [data-testid="stFileUploader"] {
-        border-radius: 14px; border: 2px dashed #a7f3d0;
-        background: #f0fdf4; padding: 1rem;
+        border-radius: 16px; border: 2px dashed #99f6e4;
+        background: #f0fdfa; padding: 1.2rem;
     }
     [data-testid="stFileUploader"]:hover {
-        border-color: #10b981; background: #ecfdf5;
+        border-color: #14b8a6; background: #ccfbf1;
     }
 
-    /* EMPTY STATE */
-    .empty-state { text-align: center; padding: 3rem 1rem; color: #94a3b8; }
-    .empty-state-icon { font-size: 3rem; margin-bottom: 0.7rem; opacity: 0.4; }
+    /* ============ EXPANDER ============ */
+    .streamlit-expanderHeader {
+        font-weight: 600; font-size: 0.9rem;
+        color: #334155; background: #f8fafc !important;
+        border-radius: 10px !important;
+    }
 
-    /* METRIC SIDEBAR */
+    /* ============ METRIC SIDEBAR ============ */
     [data-testid="stSidebar"] [data-testid="stMetric"] {
-        background: rgba(255,255,255,0.04); padding: 0.7rem 0.9rem;
-        border-radius: 10px; border: 1px solid rgba(255,255,255,0.06);
+        background: rgba(255,255,255,0.04);
+        padding: 0.7rem 0.9rem; border-radius: 10px;
+        border: 1px solid rgba(255,255,255,0.06);
         margin-bottom: 0.5rem;
     }
     [data-testid="stSidebar"] [data-testid="stMetricLabel"] * {
-        color: #94a3b8 !important; font-size: 0.75rem !important;
+        color: #94a3b8 !important; font-size: 0.72rem !important;
     }
     [data-testid="stSidebar"] [data-testid="stMetricValue"] * {
         color: #ffffff !important; font-size: 1.3rem !important;
         font-weight: 700 !important;
     }
 
+    /* ============ EMPTY ============ */
+    .empty-state { text-align: center; padding: 3rem 1rem; color: #94a3b8; }
+    .empty-icon { font-size: 3rem; margin-bottom: 0.7rem; opacity: 0.4; }
+
+    /* ============ TABS ============ */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 4px; background: white; padding: 5px;
+        border-radius: 12px; border: 1px solid #e2e8f0;
+        margin-bottom: 1.5rem;
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 38px; border-radius: 8px; padding: 0 18px;
+        font-weight: 600; font-size: 0.85rem; color: #64748b;
+        background: transparent;
+    }
+    .stTabs [aria-selected="true"] {
+        background: linear-gradient(135deg, #0d9488, #06b6d4) !important;
+        color: white !important;
+    }
+
     @media (max-width: 768px) {
         .block-container { padding: 1rem !important; }
-        .page-title { font-size: 1.3rem; }
+        .page-title { font-size: 1.5rem; }
+        .hero h1 { font-size: 1.4rem; }
     }
 </style>
 """, unsafe_allow_html=True)
@@ -232,19 +406,18 @@ with st.sidebar:
         "Navigation",
         [
             "🏠  Dashboard",
-            "💊  Medicine Verifier",
-            "📸  Prescription Reader",
-            "⚗️  Interaction Checker",
-            "🩺  Symptom Suggester",
+            "💊  Verify Medicine",
+            "📸  Read Prescription",
+            "🩺  Symptom Checker",
             "📢  Complaints",
             "🛠️  Department Panel",
-            "💾  Database",
         ],
         label_visibility="collapsed"
     )
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.markdown("### 📊 Live Stats")
+
     stats = get_complaint_stats()
     st.metric("Total Complaints", stats["total"])
     st.metric("Pending", stats["pending"])
@@ -255,202 +428,153 @@ with st.sidebar:
 
 
 # ============================================================
-# PAGE: DASHBOARD
+# DASHBOARD
 # ============================================================
 if page == "🏠  Dashboard":
     st.markdown("""
     <div class="hero">
-        <h1>💊 MediScan AI Dashboard</h1>
-        <p>Real-time overview of medicine safety, complaints, and activity</p>
+        <div class="hero-content">
+            <h1>💊 Welcome to MediScan AI</h1>
+            <p>Verify medicines, read prescriptions, and stay safe — all in one place</p>
+        </div>
     </div>
     """, unsafe_allow_html=True)
 
-    # Live stats
+    # KPI Cards
     stats = get_complaint_stats()
 
     c1, c2, c3, c4 = st.columns(4)
     with c1:
         st.markdown(f"""
-        <div class="kpi-card">
-            <div class="kpi-icon green">💊</div>
-            <div class="kpi-label">Medicines in DB</div>
+        <div class="kpi">
+            <div class="kpi-icon teal">💊</div>
+            <div class="kpi-label">Medicines Verified</div>
             <div class="kpi-value">{len(MEDICINES)}</div>
+            <div class="kpi-sub">In database</div>
         </div>
         """, unsafe_allow_html=True)
     with c2:
         st.markdown(f"""
-        <div class="kpi-card">
-            <div class="kpi-icon blue">⚗️</div>
-            <div class="kpi-label">Interactions</div>
-            <div class="kpi-value">{len(INTERACTIONS)}</div>
+        <div class="kpi blue">
+            <div class="kpi-icon blue">📢</div>
+            <div class="kpi-label">Total Complaints</div>
+            <div class="kpi-value">{stats['total']}</div>
+            <div class="kpi-sub">Filed by users</div>
         </div>
         """, unsafe_allow_html=True)
     with c3:
         st.markdown(f"""
-        <div class="kpi-card">
-            <div class="kpi-icon orange">📢</div>
-            <div class="kpi-label">Pending Complaints</div>
+        <div class="kpi orange">
+            <div class="kpi-icon orange">⏳</div>
+            <div class="kpi-label">Pending</div>
             <div class="kpi-value">{stats['pending']}</div>
+            <div class="kpi-sub">Awaiting action</div>
         </div>
         """, unsafe_allow_html=True)
     with c4:
         st.markdown(f"""
-        <div class="kpi-card">
-            <div class="kpi-icon purple">👍</div>
-            <div class="kpi-label">Total Upvotes</div>
-            <div class="kpi-value">{stats['upvotes']}</div>
+        <div class="kpi purple">
+            <div class="kpi-icon purple">✅</div>
+            <div class="kpi-label">Resolved</div>
+            <div class="kpi-value">{stats['resolved']}</div>
+            <div class="kpi-sub">Cases closed</div>
         </div>
         """, unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown("### 🎯 Quick Actions")
+    st.markdown("""
+    <div class="page-eyebrow">QUICK ACTIONS</div>
+    <h2 style="font-family:'Space Grotesk'; font-size:1.5rem; font-weight:700; color:#0f172a; margin:0 0 1.2rem 0;">
+        What would you like to do?
+    </h2>
+    """, unsafe_allow_html=True)
 
-    col1, col2 = st.columns(2)
+    col1, col2 = st.columns(2, gap="large")
     with col1:
         st.markdown("""
-        <div class="card">
-            <h3 style="margin:0 0 0.5rem 0; color:#0f172a;">💊 Verify a Medicine</h3>
-            <p style="color:#64748b; font-size:0.9rem; margin:0;">
-                Barcode ya naam se check karo — genuine hai ya fake.
-            </p>
-        </div>
-        <div class="card">
-            <h3 style="margin:0 0 0.5rem 0; color:#0f172a;">📸 Read Prescription</h3>
-            <p style="color:#64748b; font-size:0.9rem; margin:0;">
-                Photo upload karo, clean text mile + download karo.
-            </p>
+        <div class="action-card">
+            <div style="font-size:2rem;">💊</div>
+            <div class="action-title">Verify a Medicine</div>
+            <div class="action-desc">
+                Upload a photo of the medicine package. Our system will check if it's genuine or fake.
+            </div>
         </div>
         """, unsafe_allow_html=True)
-    with col2:
+        st.markdown("<br>", unsafe_allow_html=True)
         st.markdown("""
-        <div class="card">
-            <h3 style="margin:0 0 0.5rem 0; color:#0f172a;">⚗️ Check Interactions</h3>
-            <p style="color:#64748b; font-size:0.9rem; margin:0;">
-                Do ya zyada medicines safe hain ya nahi — pata karo.
-            </p>
-        </div>
-        <div class="card">
-            <h3 style="margin:0 0 0.5rem 0; color:#0f172a;">📢 File a Complaint</h3>
-            <p style="color:#64748b; font-size:0.9rem; margin:0;">
-                Fake medicine mile to government tak report karo.
-            </p>
+        <div class="action-card">
+            <div style="font-size:2rem;">📸</div>
+            <div class="action-title">Read Prescription</div>
+            <div class="action-desc">
+                Upload your prescription photo. Get a clean, readable list of medicines.
+            </div>
         </div>
         """, unsafe_allow_html=True)
 
-    # Recent complaints
-    st.markdown("### 📢 Recent Complaints")
-    complaints = get_all_complaints()[:5]
+    with col2:
+        st.markdown("""
+        <div class="action-card">
+            <div style="font-size:2rem;">🩺</div>
+            <div class="action-title">Symptom Checker</div>
+            <div class="action-desc">
+                Describe your symptoms. Get safe OTC medicine suggestions instantly.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("""
+        <div class="action-card">
+            <div style="font-size:2rem;">📢</div>
+            <div class="action-title">File a Complaint</div>
+            <div class="action-desc">
+                Found a fake medicine? Report it directly to the government department.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    st.markdown("""
+    <div class="page-eyebrow">RECENT ACTIVITY</div>
+    <h2 style="font-family:'Space Grotesk'; font-size:1.3rem; font-weight:700; color:#0f172a; margin:0 0 1rem 0;">
+        Latest Complaints
+    </h2>
+    """, unsafe_allow_html=True)
+
+    complaints = get_all_complaints()[:3]
     if complaints:
         for c in complaints:
-            status_class = "sev-resolved" if c["status"] == "Resolved" else "sev-pending"
+            badge_class = "badge-resolved" if c["status"] == "Resolved" else "badge-pending"
             st.markdown(f"""
             <div class="card">
-                <div style="display:flex; justify-content:space-between; align-items:start;">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
                     <div>
-                        <h4 style="margin:0 0 0.3rem 0; color:#0f172a;">🆔 {c['id']}</h4>
-                        <div style="font-size:0.88rem; color:#334155;">
-                            💊 {c['medicine']} — 🏪 {c['pharmacy']}, {c['city']}
+                        <div style="font-family:'Space Grotesk'; font-weight:700; color:#0d9488; font-size:0.9rem;">
+                            🆔 {c['id']}
                         </div>
-                        <div style="font-size:0.75rem; color:#94a3b8; margin-top:0.4rem;">
-                            📅 {c['date']} · 👍 {c['upvotes']} upvotes · 💬 {len(c['comments'])} comments
+                        <div style="font-size:0.95rem; color:#0f172a; font-weight:600; margin-top:0.3rem;">
+                            💊 {c['medicine']} — 🏪 {c['pharmacy']}
+                        </div>
+                        <div style="font-size:0.78rem; color:#94a3b8; margin-top:0.4rem;">
+                            📍 {c['city']} · 📅 {c['date']} · 👍 {c['upvotes']} upvotes
                         </div>
                     </div>
-                    <span class="sev {status_class}">{c['status']}</span>
+                    <span class="badge {badge_class}">{c['status']}</span>
                 </div>
             </div>
             """, unsafe_allow_html=True)
     else:
-        st.info("No complaints yet. Go to Complaints tab to file one.")
+        st.info("📭 No complaints yet. Your activity will appear here.")
 
 
 # ============================================================
-# PAGE: MEDICINE VERIFIER
+# VERIFY MEDICINE (Image-only)
 # ============================================================
-elif page == "💊  Medicine Verifier":
+elif page == "💊  Verify Medicine":
     st.markdown("""
-    <div class="page-header">
-        <h1 class="page-title">💊 Medicine Verifier</h1>
-        <div class="page-sub">Barcode ya naam se verify karo — genuine hai ya fake</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    tab1, tab2 = st.tabs(["🔢 By Barcode", "🔤 By Name"])
-
-    with tab1:
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.markdown("#### Barcode enter karo")
-        st.caption("Demo barcodes: 8901234567890 (Panadol), 8901234567891 (Brufen)")
-        barcode = st.text_input("Barcode", placeholder="e.g., 8901234567890",
-                                label_visibility="collapsed")
-
-        if st.button("🔍  Verify Barcode", type="primary", use_container_width=True):
-            result = verify_by_barcode(barcode)
-            if result["status"] == "GENUINE":
-                st.success(result["message"])
-                if result["medicine"]:
-                    med = result["medicine"]
-                    st.markdown(f"""
-                    <div class="card">
-                        <div class="info-row"><span class="info-label">Brand</span><span class="info-value">{med['name']}</span></div>
-                        <div class="info-row"><span class="info-label">Generic</span><span class="info-value">{med['generic']}</span></div>
-                        <div class="info-row"><span class="info-label">Manufacturer</span><span class="info-value">{med['manufacturer']}</span></div>
-                        <div class="info-row"><span class="info-label">Category</span><span class="info-value">{med['category']}</span></div>
-                        <div class="info-row"><span class="info-label">Dosage</span><span class="info-value">{med['dosage']}</span></div>
-                        <div class="info-row"><span class="info-label">Price</span><span class="info-value">{med['price']}</span></div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                for check in result.get("checks", []):
-                    st.markdown(f"- {check}")
-            elif result["status"] == "SUSPICIOUS":
-                st.error(result["message"])
-                st.markdown("**🚨 Recommended:**")
-                for check in result.get("checks", []):
-                    st.markdown(f"- {check}")
-                st.markdown("---")
-                if st.button("📢 File a Complaint", type="primary"):
-                    st.session_state["goto_complaint"] = barcode
-                    st.info("Go to Complaints tab to report this.")
-            else:
-                st.warning(result["message"])
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    with tab2:
-        st.markdown('<div class="card">', unsafe_allow_html=True)
-        name = st.text_input("Medicine name", placeholder="e.g., Panadol",
-                             label_visibility="collapsed")
-
-        if st.button("🔍  Verify Name", type="primary", use_container_width=True):
-            result = verify_by_name(name)
-            if result["status"] == "GENUINE":
-                st.success(result["message"])
-                med = result["medicine"]
-                st.markdown(f"""
-                <div class="card">
-                    <div class="info-row"><span class="info-label">Uses</span><span class="info-value">{med['uses']}</span></div>
-                    <div class="info-row"><span class="info-label">Dosage</span><span class="info-value">{med['dosage']}</span></div>
-                    <div class="info-row"><span class="info-label">Side Effects</span><span class="info-value">{med['side_effects']}</span></div>
-                </div>
-                """, unsafe_allow_html=True)
-            elif result["status"] == "SUSPICIOUS":
-                st.warning(result["message"])
-            else:
-                st.error(result["message"])
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    st.markdown("---")
-    st.markdown("#### ✅ Visual Verification Checklist")
-    for item in get_verification_checklist():
-        st.markdown(f"- {item}")
-
-
-# ============================================================
-# PAGE: PRESCRIPTION READER
-# ============================================================
-elif page == "📸  Prescription Reader":
-    st.markdown("""
-    <div class="page-header">
-        <h1 class="page-title">📸 Prescription Reader</h1>
-        <div class="page-sub">Photo upload karo → Clean readable text mile + Download</div>
+    <div class="page-head">
+        <div class="page-eyebrow">MEDICINE VERIFICATION</div>
+        <h1 class="page-title">Verify Your Medicine</h1>
+        <div class="page-desc">Upload a photo of the medicine package — we'll check if it's genuine or fake</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -458,19 +582,156 @@ elif page == "📸  Prescription Reader":
 
     with col1:
         st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.markdown("#### 📤 Upload Prescription")
+        st.markdown('<div class="card-title">📤 Upload Medicine Photo</div>', unsafe_allow_html=True)
+        st.caption("Take a clear photo of the front of the medicine package")
+
         uploaded = st.file_uploader(
-            "Choose image",
+            "Upload image",
             type=["jpg", "jpeg", "png"],
-            label_visibility="collapsed"
+            label_visibility="collapsed",
+            key="verify_upload"
         )
+
+        if uploaded:
+            image = Image.open(uploaded)
+            st.image(image, caption="Uploaded Medicine", use_container_width=True)
+        else:
+            st.markdown("""
+            <div class="empty-state">
+                <div class="empty-icon">💊</div>
+                <p>Upload a photo of the medicine package</p>
+                <p style="font-size:0.8rem; color:#cbd5e1; margin-top:0.5rem;">
+                    Make sure text on the package is clearly visible
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    with col2:
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.markdown('<div class="card-title">🔍 Verification Result</div>', unsafe_allow_html=True)
+
+        if not uploaded:
+            st.markdown("""
+            <div class="empty-state">
+                <div class="empty-icon">🔍</div>
+                <p>Result will appear here</p>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            with st.spinner("🔎 Analyzing medicine package..."):
+                uploaded.seek(0)
+                raw_text = extract_text_from_image(uploaded)
+                detected = extract_medicine_names(raw_text)
+
+            if not detected:
+                st.warning("⚠️ Could not detect any medicine from the image.")
+                st.caption("Try a clearer photo with the medicine name visible.")
+            else:
+                result = verify_by_image_match(detected)
+
+                for r in result["results"]:
+                    badge_class = "badge-genuine" if r["status"] == "GENUINE" else "badge-suspicious"
+                    icon = "✅" if r["status"] == "GENUINE" else "⚠️"
+
+                    st.markdown(f"""
+                    <div style="padding:1rem; background:#f8fafc; border-radius:12px; margin-bottom:1rem; border-left:4px solid {'#10b981' if r['status']=='GENUINE' else '#ef4444'};">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <div style="font-family:'Space Grotesk'; font-weight:700; color:#0f172a; font-size:1.05rem;">
+                                {icon} {r['medicine']}
+                            </div>
+                            <span class="badge {badge_class}">{r['status']}</span>
+                        </div>
+                        <div style="font-size:0.82rem; color:#64748b; margin-top:0.4rem;">
+                            Confidence: <b style="color:#0d9488;">{r['confidence']*100:.0f}%</b>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                    if r["status"] == "GENUINE":
+                        st.markdown(f"""
+                        <div class="info-row"><span class="info-label">Manufacturer</span><span class="info-value">{r['manufacturer']}</span></div>
+                        <div class="info-row"><span class="info-label">Category</span><span class="info-value">{r['category']}</span></div>
+                        <div class="info-row"><span class="info-label">Dosage</span><span class="info-value">{r['dosage']}</span></div>
+                        <div class="info-row"><span class="info-label">DRAP Price</span><span class="info-value">{r['price']}</span></div>
+                        """, unsafe_allow_html=True)
+
+                if result["has_fake"]:
+                    st.error("🚨 **Suspicious medicine detected!** We recommend filing a complaint.")
+                    if st.button("📢  File a Complaint Now", type="primary", use_container_width=True):
+                        st.session_state["goto_complaint"] = True
+                        # Auto-file a complaint
+                        for r in result["results"]:
+                            if r["status"] == "SUSPICIOUS":
+                                cid = file_complaint(
+                                    medicine_name=r["medicine"],
+                                    pharmacy_name="Unknown (via image upload)",
+                                    city="Unknown",
+                                    description=f"Suspicious medicine detected via image verification. Confidence: {r['confidence']*100:.0f}%",
+                                    reporter="MediScan AI (Auto)"
+                                )
+                                st.success(f"✅ Complaint auto-filed! ID: **{cid}**")
+                                st.info("📨 Your complaint has been sent to the Department Panel for review.")
+                                st.balloons()
+                                break
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    # Professional checklist
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown("""
+    <div class="page-eyebrow">VISUAL VERIFICATION GUIDE</div>
+    <h2 style="font-family:'Space Grotesk'; font-size:1.3rem; font-weight:700; color:#0f172a; margin:0 0 1rem 0;">
+        How to Spot a Fake Medicine
+    </h2>
+    """, unsafe_allow_html=True)
+
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    for i, item in enumerate(get_verification_checklist(), 1):
+        st.markdown(f"""
+        <div class="checklist-item">
+            <div class="checklist-num">{i}</div>
+            <div>
+                <div class="checklist-title">{item['title']}</div>
+                <div class="checklist-desc">{item['desc']}</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
+# ============================================================
+# PRESCRIPTION READER
+# ============================================================
+elif page == "📸  Read Prescription":
+    st.markdown("""
+    <div class="page-head">
+        <div class="page-eyebrow">PRESCRIPTION READER</div>
+        <h1 class="page-title">Read Your Prescription</h1>
+        <div class="page-desc">Upload a prescription photo — get a clean list of medicines you can download</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    col1, col2 = st.columns([1, 1], gap="large")
+
+    with col1:
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.markdown('<div class="card-title">📤 Upload Prescription</div>', unsafe_allow_html=True)
+        st.caption("Make sure the medicine names are clearly visible")
+
+        uploaded = st.file_uploader(
+            "Upload image",
+            type=["jpg", "jpeg", "png"],
+            label_visibility="collapsed",
+            key="rx_upload"
+        )
+
         if uploaded:
             image = Image.open(uploaded)
             st.image(image, caption="Original Prescription", use_container_width=True)
         else:
             st.markdown("""
             <div class="empty-state">
-                <div class="empty-state-icon">📸</div>
+                <div class="empty-icon">📸</div>
                 <p>Upload a prescription photo</p>
             </div>
             """, unsafe_allow_html=True)
@@ -478,13 +739,13 @@ elif page == "📸  Prescription Reader":
 
     with col2:
         st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.markdown("#### 📄 Extracted (Readable)")
+        st.markdown('<div class="card-title">📄 Extracted Medicines</div>', unsafe_allow_html=True)
 
         if not uploaded:
             st.markdown("""
             <div class="empty-state">
-                <div class="empty-state-icon">📄</div>
-                <p>Readable text will appear here</p>
+                <div class="empty-icon">📄</div>
+                <p>Clean medicine list will appear here</p>
             </div>
             """, unsafe_allow_html=True)
         else:
@@ -495,206 +756,159 @@ elif page == "📸  Prescription Reader":
 
             if "OCR_ERROR" in raw_text:
                 st.error("❌ Could not read the image.")
-            else:
-                if medicines_found:
-                    st.success(f"✅ Found **{len(medicines_found)}** medicine(s)")
-                    for m in medicines_found:
-                        conf_color = "#10b981" if m["confidence"] > 0.85 else "#f59e0b"
-                        st.markdown(f"""
-                        <div class="card">
-                            <h4 style="margin:0 0 0.4rem 0;">💊 {m['medicine']}</h4>
-                            <div class="info-row">
-                                <span class="info-label">Generic</span>
-                                <span class="info-value">{m['generic']}</span>
-                            </div>
-                            <div class="info-row">
-                                <span class="info-label">Confidence</span>
-                                <span class="info-value" style="color:{conf_color}; font-weight:700;">
-                                    {m['confidence']*100:.0f}%
-                                </span>
-                            </div>
+            elif medicines_found:
+                st.success(f"✅ Found **{len(medicines_found)}** medicine(s)")
+                for m in medicines_found:
+                    st.markdown(f"""
+                    <div style="padding:0.9rem 1.1rem; background:#f0fdfa; border-radius:12px; margin-bottom:0.6rem; border-left:4px solid #0d9488;">
+                        <div style="font-family:'Space Grotesk'; font-weight:700; color:#0f172a; font-size:1rem;">
+                            💊 {m['medicine']}
                         </div>
-                        """, unsafe_allow_html=True)
-                else:
-                    st.warning("⚠️ No medicines detected.")
+                        <div style="font-size:0.82rem; color:#64748b; margin-top:0.3rem;">
+                            Generic: <b>{m['generic']}</b> · 
+                            Confidence: <b style="color:#0d9488;">{m['confidence']*100:.0f}%</b>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
 
-                # Download section
-                st.markdown("---")
-                st.markdown("##### ⬇️ Download")
-                formatted = format_prescription(medicines_found, raw_text)
+                # Download
+                formatted = format_prescription(medicines_found)
+                st.markdown("<br>", unsafe_allow_html=True)
 
-                c1, c2 = st.columns(2)
-                with c1:
+                csv_content = "Medicine,Generic,Confidence\n" + "\n".join(
+                    [f"{m['medicine']},{m['generic']},{m['confidence']}" for m in medicines_found]
+                )
+
+                dc1, dc2 = st.columns(2)
+                with dc1:
                     st.download_button(
-                        "⬇️ Download TXT",
+                        "⬇️ Download as TXT",
                         formatted,
                         file_name=f"prescription_{datetime.now().strftime('%Y%m%d_%H%M')}.txt",
                         mime="text/plain",
                         use_container_width=True
                     )
-                with c2:
+                with dc2:
                     st.download_button(
-                        "⬇️ Download CSV",
-                        "Medicine,Generic,Confidence\n" + "\n".join(
-                            [f"{m['medicine']},{m['generic']},{m['confidence']}"
-                             for m in medicines_found]
-                        ),
+                        "⬇️ Download as CSV",
+                        csv_content,
                         file_name=f"prescription_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
                         mime="text/csv",
                         use_container_width=True
                     )
+            else:
+                st.warning("⚠️ No medicines detected. Try a clearer photo.")
+                st.caption("Make sure medicine names are clearly visible")
 
-                with st.expander("📄 View raw OCR text"):
-                    st.text(raw_text)
+            with st.expander("📄 View raw OCR text"):
+                st.text(raw_text)
         st.markdown('</div>', unsafe_allow_html=True)
 
 
 # ============================================================
-# PAGE: INTERACTION CHECKER
+# SYMPTOM CHECKER
 # ============================================================
-elif page == "⚗️  Interaction Checker":
+elif page == "🩺  Symptom Checker":
     st.markdown("""
-    <div class="page-header">
-        <h1 class="page-title">⚗️ Drug Interaction Checker</h1>
-        <div class="page-sub">Do ya zyada medicines safe hain ya nahi</div>
+    <div class="page-head">
+        <div class="page-eyebrow">SYMPTOM CHECKER</div>
+        <h1 class="page-title">What Are You Feeling?</h1>
+        <div class="page-desc">Describe your symptoms in plain words — get safe OTC medicine suggestions</div>
     </div>
     """, unsafe_allow_html=True)
 
-    med_names = get_all_medicine_names()
+    col1, col2 = st.columns([1, 1], gap="large")
 
-    st.markdown('<div class="card">', unsafe_allow_html=True)
-    st.markdown("#### Select medicines to check")
+    with col1:
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.markdown('<div class="card-title">📝 Describe Your Symptoms</div>', unsafe_allow_html=True)
 
-    num_meds = st.slider("How many medicines?", 2, 5, 2)
-    selected = []
-    cols = st.columns(num_meds)
-    for i in range(num_meds):
-        with cols[i]:
-            selected.append(st.selectbox(
-                f"Medicine {i+1}",
-                med_names,
-                index=min(i, len(med_names)-1),
-                key=f"med_{i}"
-            ))
+        symptom_text = st.text_input(
+            "Symptoms (comma-separated)",
+            placeholder="e.g., fever, headache, body ache",
+            label_visibility="collapsed"
+        )
+        st.caption("Examples: fever, headache, cough, cold, heartburn, stomach pain, back pain, sore throat, diarrhea, vomiting, menstrual cramps")
 
-    if st.button("🔍  Check All Interactions", type="primary", use_container_width=True):
-        st.markdown("### 📋 Results")
+        age_group = st.selectbox(
+            "Age Group",
+            ["Adult", "Child (0-12)", "Elderly (60+)"]
+        )
 
-        from itertools import combinations
-        pairs = list(combinations(selected, 2))
-        severe_count = 0
+        if st.button("🔍  Get Suggestions", type="primary", use_container_width=True):
+            st.session_state["symptom_result"] = suggest_medicines(symptom_text, age_group)
+        st.markdown('</div>', unsafe_allow_html=True)
 
-        for a, b in pairs:
-            result = check_interaction(a, b)
-            sev = result["severity"]
-            badge_class = {"SEVERE": "sev-severe", "MODERATE": "sev-moderate",
-                          "SAFE": "sev-safe"}.get(sev, "sev-safe")
+    with col2:
+        st.markdown('<div class="card">', unsafe_allow_html=True)
+        st.markdown('<div class="card-title">💡 Suggestions</div>', unsafe_allow_html=True)
 
-            if sev == "SEVERE":
-                severe_count += 1
+        result = st.session_state.get("symptom_result")
 
-            st.markdown(f"""
-            <div class="card">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <h4 style="margin:0;">{a} + {b}</h4>
-                    <span class="sev {badge_class}">{sev}</span>
-                </div>
-                <div class="info-row" style="margin-top:0.6rem;">
-                    <span class="info-label">Risk</span>
-                    <span class="info-value">{result['risk']}</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">Action</span>
-                    <span class="info-value">{result['action']}</span>
-                </div>
+        if not result:
+            st.markdown("""
+            <div class="empty-state">
+                <div class="empty-icon">💡</div>
+                <p>Enter your symptoms to get suggestions</p>
             </div>
             """, unsafe_allow_html=True)
-
-        if severe_count > 0:
-            st.error(f"🚨 **{severe_count} SEVERE interaction(s) found!** Consult doctor immediately.")
-        elif all(check_interaction(a, b)["severity"] == "SAFE" for a, b in pairs):
-            st.success("✅ All combinations are SAFE.")
-        else:
-            st.warning("⚠️ Some moderate interactions found. Take precautions.")
-    st.markdown('</div>', unsafe_allow_html=True)
-
-
-# ============================================================
-# PAGE: SYMPTOM SUGGESTER
-# ============================================================
-elif page == "🩺  Symptom Suggester":
-    st.markdown("""
-    <div class="page-header">
-        <h1 class="page-title">🩺 Symptom-to-Medicine Suggester</h1>
-        <div class="page-sub">Symptoms batao → Safe OTC medicines suggest karega</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    st.markdown('<div class="card">', unsafe_allow_html=True)
-    symptom_text = st.text_input(
-        "Symptoms",
-        placeholder="e.g., fever, headache, body ache",
-        label_visibility="collapsed"
-    )
-    age_group = st.selectbox(
-        "Age Group",
-        ["Adult", "Child (0-12)", "Elderly (60+)"]
-    )
-
-    if st.button("🔍  Get Suggestions", type="primary", use_container_width=True):
-        result = suggest_medicines(symptom_text, age_group)
-
-        if not result.get("found"):
+        elif not result.get("found"):
             st.warning(result["message"])
         else:
-            st.success("✅ Suggestions found")
             for r in result["results"]:
                 st.markdown(f"""
-                <div class="card">
-                    <h4 style="margin:0 0 0.6rem 0;">🩺 {r['symptom'].title()}</h4>
+                <div style="padding:1rem 1.2rem; background:#f0fdfa; border-radius:12px; margin-bottom:1rem; border-left:4px solid #0d9488;">
+                    <div style="font-family:'Space Grotesk'; font-weight:700; color:#0f172a; font-size:1rem;">
+                        🩺 {r['symptom'].title()}
+                    </div>
+                </div>
                 """, unsafe_allow_html=True)
 
                 if r["medicines"]:
                     st.markdown("**💊 Suggested OTC Medicines:**")
                     for m in r["medicines"]:
                         st.markdown(f"""
-                        - **{m['name']}** ({m['generic']})
-                          - Dosage: {m['dosage']}
-                          - Price: {m['price']}
-                        """)
+                        <div style="padding:0.8rem 1rem; background:#ffffff; border:1px solid #e2e8f0; border-radius:10px; margin-bottom:0.5rem;">
+                            <div style="font-weight:700; color:#0f172a;">{m['name']}</div>
+                            <div style="font-size:0.8rem; color:#64748b; margin-top:0.2rem;">
+                                {m['generic']} · {m['dosage']} · <b style="color:#0d9488;">{m['price']}</b>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
                 else:
-                    st.info("No OTC medicine — consult doctor")
+                    st.info("No OTC medicine — please consult a doctor")
 
                 st.markdown("**⚠️ Warnings:**")
                 for w in r["warnings"]:
                     st.markdown(f"- {w}")
 
-                st.markdown("**🚨 See Doctor If:**")
+                st.markdown("**🚨 See a Doctor If:**")
                 for rf in r["red_flags"]:
                     st.markdown(f"- {rf}")
 
-                st.markdown('</div>', unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+                st.markdown("---")
+        st.markdown('</div>', unsafe_allow_html=True)
 
-    st.caption("⚠️ This is NOT a diagnosis. Always consult a licensed doctor.")
+    st.caption("⚠️ This is NOT a medical diagnosis. Always consult a licensed doctor before taking any medicine.")
 
 
 # ============================================================
-# PAGE: COMPLAINTS
+# COMPLAINTS
 # ============================================================
 elif page == "📢  Complaints":
     st.markdown("""
-    <div class="page-header">
-        <h1 class="page-title">📢 Complaints</h1>
-        <div class="page-sub">Fake medicine report karo — government department tak pahunchao</div>
+    <div class="page-head">
+        <div class="page-eyebrow">COMMUNITY REPORTS</div>
+        <h1 class="page-title">Report & Track Complaints</h1>
+        <div class="page-desc">File a complaint about a fake medicine — track it and see the department's response</div>
     </div>
     """, unsafe_allow_html=True)
 
-    tab1, tab2 = st.tabs(["📝 File Complaint", "📋 View All"])
+    tab1, tab2 = st.tabs(["📝 File New Complaint", "📋 View All Complaints"])
 
     with tab1:
         st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.markdown("#### File a Complaint")
+        st.markdown('<div class="card-title">File a Complaint</div>', unsafe_allow_html=True)
 
         c1, c2 = st.columns(2)
         with c1:
@@ -702,19 +916,22 @@ elif page == "📢  Complaints":
             city = st.selectbox("City", ["Karachi", "Lahore", "Islamabad", "Rawalpindi",
                                          "Faisalabad", "Multan", "Peshawar", "Quetta"])
         with c2:
-            pharmacy = st.text_input("Pharmacy / Shop Name", placeholder="e.g., XYZ Medical")
+            pharmacy = st.text_input("Pharmacy / Shop Name", placeholder="e.g., XYZ Medical Store")
             reporter = st.text_input("Your Name (optional)", value="Anonymous")
 
-        description = st.text_area("Description",
-            placeholder="Kya masla hai? Kahan se kharidi? Kya hua?")
+        description = st.text_area(
+            "Description",
+            placeholder="Describe the issue: What did you notice? Where did you buy it? Any symptoms?",
+            height=100
+        )
 
-        if st.button("📤 Submit Complaint", type="primary", use_container_width=True):
+        if st.button("📤  Submit Complaint", type="primary", use_container_width=True):
             if not med_name.strip() or not pharmacy.strip() or not description.strip():
                 st.error("Please fill all required fields.")
             else:
                 cid = file_complaint(med_name, pharmacy, city, description, reporter)
                 st.success(f"✅ Complaint submitted! ID: **{cid}**")
-                st.info("📨 Your complaint has been sent to DRAP (Drug Regulatory Authority of Pakistan).")
+                st.info("📨 Your complaint has been forwarded to the Department Panel for review.")
                 st.balloons()
         st.markdown('</div>', unsafe_allow_html=True)
 
@@ -724,34 +941,29 @@ elif page == "📢  Complaints":
         if not complaints:
             st.markdown("""
             <div class="empty-state">
-                <div class="empty-state-icon">📭</div>
+                <div class="empty-icon">📭</div>
                 <p>No complaints yet</p>
             </div>
             """, unsafe_allow_html=True)
         else:
             for c in complaints:
-                status_class = "sev-resolved" if c["status"] == "Resolved" else "sev-pending"
+                badge_class = "badge-resolved" if c["status"] == "Resolved" else "badge-pending"
                 with st.expander(f"🆔 {c['id']} — 💊 {c['medicine']} — {c['status']}"):
                     st.markdown(f"""
-                    <div class="card">
-                        <div style="display:flex; justify-content:space-between;">
-                            <div>
-                                <div class="info-row"><span class="info-label">Medicine</span><span class="info-value">{c['medicine']}</span></div>
-                                <div class="info-row"><span class="info-label">Pharmacy</span><span class="info-value">{c['pharmacy']}, {c['city']}</span></div>
-                                <div class="info-row"><span class="info-label">Reporter</span><span class="info-value">{c['reporter']}</span></div>
-                                <div class="info-row"><span class="info-label">Date</span><span class="info-value">{c['date']}</span></div>
-                                <div class="info-row"><span class="info-label">Status</span><span class="info-value"><span class="sev {status_class}">{c['status']}</span></span></div>
-                            </div>
-                        </div>
-                        <div style="margin-top:0.8rem; padding:0.8rem; background:#f8fafc; border-radius:8px;">
-                            <b>Description:</b><br>{c['description']}
-                        </div>
+                    <div style="padding:1rem; background:#f8fafc; border-radius:12px; margin-bottom:1rem;">
+                        <div class="info-row"><span class="info-label">Medicine</span><span class="info-value">{c['medicine']}</span></div>
+                        <div class="info-row"><span class="info-label">Pharmacy</span><span class="info-value">{c['pharmacy']}</span></div>
+                        <div class="info-row"><span class="info-label">City</span><span class="info-value">{c['city']}</span></div>
+                        <div class="info-row"><span class="info-label">Reported by</span><span class="info-value">{c['reporter']}</span></div>
+                        <div class="info-row"><span class="info-label">Date</span><span class="info-value">{c['date']}</span></div>
+                        <div class="info-row"><span class="info-label">Status</span><span class="info-value"><span class="badge {badge_class}">{c['status']}</span></span></div>
+                    </div>
+                    <div style="padding:1rem; background:#fef3c7; border-radius:10px; margin-bottom:1rem;">
+                        <b>Description:</b><br>{c['description']}
                     </div>
                     """, unsafe_allow_html=True)
 
-                    # Upvote + comments
                     col_up, col_comment = st.columns([1, 3])
-
                     with col_up:
                         if st.button(f"👍 Upvote ({c['upvotes']})", key=f"up_{c['id']}", use_container_width=True):
                             upvote_complaint(c["id"])
@@ -764,31 +976,30 @@ elif page == "📢  Complaints":
                             key=f"comment_{c['id']}",
                             label_visibility="collapsed"
                         )
-                        if st.button("💬 Post Comment", key=f"cbtn_{c['id']}"):
+                        if st.button("💬  Post Comment", key=f"cbtn_{c['id']}"):
                             if comment.strip():
                                 add_comment(c["id"], comment)
                                 st.rerun()
 
-                    # Show comments
                     if c["comments"]:
                         st.markdown("**💬 Comments:**")
                         for cm in c["comments"]:
                             st.markdown(f"- **{cm['user']}** ({cm['date']}): {cm['text']}")
 
-                    # Resolution
                     if c["status"] == "Resolved" and c["resolution"]:
                         st.success(f"✅ **Resolved:** {c['resolution']}")
                         st.caption(f"Resolved on: {c['resolved_date']}")
 
 
 # ============================================================
-# PAGE: DEPARTMENT PANEL
+# DEPARTMENT PANEL
 # ============================================================
 elif page == "🛠️  Department Panel":
     st.markdown("""
-    <div class="page-header">
-        <h1 class="page-title">🛠️ Department Panel</h1>
-        <div class="page-sub">Government officials — complaints review aur resolve karein</div>
+    <div class="page-head">
+        <div class="page-eyebrow">GOVERNMENT ACCESS</div>
+        <h1 class="page-title">Department Panel</h1>
+        <div class="page-desc">Review, investigate, and resolve complaints from citizens</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -796,32 +1007,41 @@ elif page == "🛠️  Department Panel":
     pending = [c for c in complaints if c["status"] == "Pending"]
 
     if not pending:
-        st.success("🎉 All complaints resolved!")
+        st.markdown("""
+        <div class="empty-state">
+            <div class="empty-icon">🎉</div>
+            <h3 style="color:#10b981;">All caught up!</h3>
+            <p>No pending complaints awaiting action.</p>
+        </div>
+        """, unsafe_allow_html=True)
     else:
-        st.info(f"**{len(pending)}** pending complaints awaiting action.")
+        st.info(f"**{len(pending)}** pending complaint(s) awaiting review.")
 
         for c in pending:
-            with st.expander(f"🆔 {c['id']} — 💊 {c['medicine']} — {c['pharmacy']}"):
+            with st.expander(f"🆔 {c['id']} — 💊 {c['medicine']} — {c['pharmacy']}, {c['city']}"):
                 st.markdown(f"""
-                <div class="card">
-                    <div class="info-row"><span class="info-label">Medicine</span><span class="info-value">{c['medicine']}</span></div>
-                    <div class="info-row"><span class="info-label">Pharmacy</span><span class="info-value">{c['pharmacy']}, {c['city']}</span></div>
-                    <div class="info-row"><span class="info-label">Reporter</span><span class="info-value">{c['reporter']}</span></div>
-                    <div class="info-row"><span class="info-label">Date</span><span class="info-value">{c['date']}</span></div>
-                    <div class="info-row"><span class="info-label">Upvotes</span><span class="info-value">👍 {c['upvotes']}</span></div>
-                </div>
-                <div style="margin:0.8rem 0; padding:0.8rem; background:#fef3c7; border-radius:8px;">
+                <div class="info-row"><span class="info-label">Medicine</span><span class="info-value">{c['medicine']}</span></div>
+                <div class="info-row"><span class="info-label">Pharmacy</span><span class="info-value">{c['pharmacy']}</span></div>
+                <div class="info-row"><span class="info-label">City</span><span class="info-value">{c['city']}</span></div>
+                <div class="info-row"><span class="info-label">Reported by</span><span class="info-value">{c['reporter']}</span></div>
+                <div class="info-row"><span class="info-label">Date</span><span class="info-value">{c['date']}</span></div>
+                <div class="info-row"><span class="info-label">Upvotes</span><span class="info-value">👍 {c['upvotes']}</span></div>
+                """, unsafe_allow_html=True)
+
+                st.markdown(f"""
+                <div style="padding:0.9rem 1rem; background:#fef3c7; border-radius:10px; margin:0.8rem 0;">
                     <b>Description:</b><br>{c['description']}
                 </div>
                 """, unsafe_allow_html=True)
 
                 resolution = st.text_area(
                     "Resolution notes",
-                    placeholder="Action taken...",
-                    key=f"res_{c['id']}"
+                    placeholder="What action was taken? e.g., Pharmacy inspected, medicine seized, warning issued...",
+                    key=f"res_{c['id']}",
+                    height=80
                 )
 
-                if st.button("✅ Mark as Resolved", key=f"resolve_{c['id']}",
+                if st.button("✅  Mark as Resolved", key=f"resolve_{c['id']}",
                              type="primary", use_container_width=True):
                     if resolution.strip():
                         resolve_complaint(c["id"], resolution)
@@ -832,52 +1052,11 @@ elif page == "🛠️  Department Panel":
 
 
 # ============================================================
-# PAGE: DATABASE
-# ============================================================
-elif page == "💾  Database":
-    st.markdown("""
-    <div class="page-header">
-        <h1 class="page-title">💾 Medicine Database</h1>
-        <div class="page-sub">Browse all verified medicines</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    search = st.text_input("🔍 Search", placeholder="Name, generic, uses, category")
-    filtered = search_medicine(search) if search.strip() else MEDICINES
-
-    st.caption(f"Showing **{len(filtered)}** of **{len(MEDICINES)}** medicines")
-
-    for med in filtered:
-        otc_badge = "🟢 OTC" if med["otc"] else "🔴 Rx"
-        with st.expander(f"💊 {med['name']} — {med['generic']}  ·  {otc_badge}  ·  {med['price']}"):
-            c1, c2 = st.columns(2)
-            with c1:
-                st.markdown(f"""
-                <div class="card">
-                    <div class="info-row"><span class="info-label">Brand</span><span class="info-value">{med['name']}</span></div>
-                    <div class="info-row"><span class="info-label">Generic</span><span class="info-value">{med['generic']}</span></div>
-                    <div class="info-row"><span class="info-label">Category</span><span class="info-value">{med['category']}</span></div>
-                    <div class="info-row"><span class="info-label">Manufacturer</span><span class="info-value">{med['manufacturer']}</span></div>
-                    <div class="info-row"><span class="info-label">Barcode</span><span class="info-value">{med['barcode']}</span></div>
-                    <div class="info-row"><span class="info-label">Price</span><span class="info-value">{med['price']}</span></div>
-                </div>
-                """, unsafe_allow_html=True)
-            with c2:
-                st.markdown(f"""
-                <div class="card">
-                    <div class="info-row"><span class="info-label">Uses</span><span class="info-value">{med['uses']}</span></div>
-                    <div class="info-row"><span class="info-label">Dosage</span><span class="info-value">{med['dosage']}</span></div>
-                    <div class="info-row"><span class="info-label">Side Effects</span><span class="info-value">{med['side_effects']}</span></div>
-                </div>
-                """, unsafe_allow_html=True)
-
-
-# ============================================================
 # FOOTER
 # ============================================================
-st.markdown("<br>", unsafe_allow_html=True)
+st.markdown("<br><br>", unsafe_allow_html=True)
 st.markdown("""
 <div style="text-align:center; color:#94a3b8; font-size:0.78rem; padding:1rem 0; border-top:1px solid #e2e8f0;">
-    MediScan AI v2.0  ·  Educational purposes only  ·  Built with Streamlit
+    MediScan AI v3.0  ·  Educational purposes only  ·  Built with Streamlit + Tesseract OCR
 </div>
 """, unsafe_allow_html=True)

@@ -1,7 +1,7 @@
 """
-MediScan AI - Symptom to OTC Medicine Suggester
+MediScan AI - Symptom Suggester (Text input, no dropdown)
 """
-from database import SYMPTOMS, find_symptom, find_medicine_by_name
+from database import find_symptom, find_medicine_by_name
 
 
 def suggest_medicines(symptom_text: str, age_group: str = "Adult"):
@@ -9,17 +9,24 @@ def suggest_medicines(symptom_text: str, age_group: str = "Adult"):
     if not symptom_text or not symptom_text.strip():
         return {"found": False, "message": "Please enter your symptoms."}
 
-    matched_symptoms = []
-    text_lower = symptom_text.lower()
+    text_lower = symptom_text.lower().strip()
 
-    for key, val in SYMPTOMS.items():
-        if key in text_lower:
-            matched_symptoms.append((key, val))
+    # Split by comma to allow multiple symptoms
+    parts = [p.strip() for p in text_lower.split(",")]
+    matched_symptoms = []
+    seen = set()
+
+    for part in parts:
+        for key, val in __import__("database").SYMPTOMS.items():
+            if (key in part or part in key) and key not in seen:
+                matched_symptoms.append((key, val))
+                seen.add(key)
+                break
 
     if not matched_symptoms:
         return {
             "found": False,
-            "message": "No matching symptoms found. Try: fever, headache, cough, cold, heartburn, etc."
+            "message": "No matching symptoms found. Try: fever, headache, cough, cold, heartburn, stomach pain, back pain, etc."
         }
 
     results = []

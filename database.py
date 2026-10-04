@@ -1,10 +1,8 @@
 """
-MediScan AI - Medicines, interactions, symptoms data
+MediScan AI - Medicines & Symptoms data
+Drug interactions removed.
 """
 
-# ============================================================
-# MEDICINES DATABASE
-# ============================================================
 MEDICINES = [
     {"name": "Panadol", "generic": "Paracetamol",
      "uses": "Fever, headache, body ache", "dosage": "500mg every 6 hours",
@@ -68,38 +66,9 @@ MEDICINES = [
      "price": "Rs. 110"},
 ]
 
-# ============================================================
-# DRUG INTERACTIONS
-# ============================================================
-INTERACTIONS = [
-    {"drug_a": "Warfarin", "drug_b": "Aspirin", "severity": "SEVERE",
-     "risk": "Increased bleeding risk", "action": "Consult doctor immediately."},
-    {"drug_a": "Warfarin", "drug_b": "Ibuprofen", "severity": "SEVERE",
-     "risk": "Bleeding + GI ulcer risk", "action": "Avoid. Use Paracetamol instead."},
-    {"drug_a": "Warfarin", "drug_b": "Mefenamic Acid", "severity": "SEVERE",
-     "risk": "Severe bleeding risk", "action": "Consult hematologist."},
-    {"drug_a": "Ibuprofen", "drug_b": "Aspirin", "severity": "MODERATE",
-     "risk": "Reduced aspirin effect + GI issues", "action": "Take at different times."},
-    {"drug_a": "Atorvastatin", "drug_b": "Clarithromycin", "severity": "SEVERE",
-     "risk": "Muscle damage risk", "action": "Consult doctor."},
-    {"drug_a": "Sertraline", "drug_b": "Tramadol", "severity": "SEVERE",
-     "risk": "Serotonin syndrome", "action": "Avoid combination."},
-    {"drug_a": "Bisoprolol", "drug_b": "Verapamil", "severity": "SEVERE",
-     "risk": "Severe bradycardia", "action": "Do not combine."},
-    {"drug_a": "Omeprazole", "drug_b": "Clopidogrel", "severity": "MODERATE",
-     "risk": "Reduced clopidogrel effect", "action": "Use Pantoprazole."},
-    {"drug_a": "Paracetamol", "drug_b": "Alcohol", "severity": "MODERATE",
-     "risk": "Liver damage", "action": "Avoid alcohol."},
-    {"drug_a": "Salbutamol", "drug_b": "Bisoprolol", "severity": "MODERATE",
-     "risk": "Bronchospasm", "action": "Use cardioselective blocker."},
-    {"drug_a": "Mefenamic Acid", "drug_b": "Aspirin", "severity": "MODERATE",
-     "risk": "GI bleeding", "action": "Take with food."},
-    {"drug_a": "Paracetamol", "drug_b": "Warfarin", "severity": "MODERATE",
-     "risk": "Enhanced anticoagulant effect", "action": "Monitor INR."},
-]
 
 # ============================================================
-# SYMPTOMS → OTC MEDICINES
+# SYMPTOMS → OTC MEDICINES (dropdown removed — but data remains)
 # ============================================================
 SYMPTOMS = {
     "fever": {
@@ -110,7 +79,7 @@ SYMPTOMS = {
     "headache": {
         "otc": ["Panadol", "Brufen"],
         "warnings": ["Don't take both together", "Max 3 days continuous"],
-        "red_flags": ["Sudden severe headache", "With vision changes", "After head injury"],
+        "red_flags": ["Sudden severe headache", "With vision changes"],
     },
     "body ache": {
         "otc": ["Panadol", "Brufen"],
@@ -130,33 +99,56 @@ SYMPTOMS = {
     "heartburn": {
         "otc": ["Risek"],
         "warnings": ["Take before meal", "See doctor if > 2 weeks"],
-        "red_flags": ["Chest pain", "Difficulty swallowing", "Vomiting blood"],
+        "red_flags": ["Chest pain", "Difficulty swallowing"],
     },
     "menstrual cramps": {
         "otc": ["Ponstan", "Brufen"],
         "warnings": ["Take after food", "Don't take both"],
-        "red_flags": ["Severe pain > 2 days", "Heavy bleeding", "Fever"],
+        "red_flags": ["Severe pain > 2 days", "Heavy bleeding"],
     },
     "diarrhea": {
         "otc": [],
         "warnings": ["ORS + hydration", "See doctor if > 2 days"],
-        "red_flags": ["Blood in stool", "Severe dehydration", "High fever"],
+        "red_flags": ["Blood in stool", "Severe dehydration"],
     },
     "allergy": {
         "otc": [],
         "warnings": ["Consult doctor for antihistamine"],
-        "red_flags": ["Breathing difficulty", "Swelling", "Anaphylaxis"],
+        "red_flags": ["Breathing difficulty", "Swelling"],
     },
     "sore throat": {
         "otc": ["Panadol"],
         "warnings": ["Warm water gargle", "See doctor if > 3 days"],
-        "red_flags": ["Difficulty swallowing", "High fever", "Rash"],
+        "red_flags": ["Difficulty swallowing", "High fever"],
+    },
+    "vomiting": {
+        "otc": [],
+        "warnings": ["ORS + hydration", "See doctor if > 24 hours"],
+        "red_flags": ["Blood in vomit", "Severe dehydration"],
+    },
+    "stomach pain": {
+        "otc": ["Risek"],
+        "warnings": ["Avoid spicy food", "See doctor if > 2 days"],
+        "red_flags": ["Severe pain", "Blood in stool", "Fever"],
+    },
+    "back pain": {
+        "otc": ["Panadol", "Brufen"],
+        "warnings": ["Rest + hot compress", "See doctor if > 1 week"],
+        "red_flags": ["Numbness in legs", "Loss of bladder control"],
+    },
+    "insomnia": {
+        "otc": [],
+        "warnings": ["Consult doctor", "Avoid caffeine after 4 PM"],
+        "red_flags": ["Persistent > 2 weeks", "With depression"],
+    },
+    "anxiety": {
+        "otc": [],
+        "warnings": ["Consult doctor", "Deep breathing exercises"],
+        "red_flags": ["Panic attacks", "Suicidal thoughts"],
     },
 }
 
-# ============================================================
-# HELPER FUNCTIONS
-# ============================================================
+
 def search_medicine(query: str):
     query = query.lower().strip()
     return [
@@ -167,12 +159,14 @@ def search_medicine(query: str):
             or query in m["category"].lower())
     ]
 
+
 def find_medicine_by_name(name: str):
     name = name.lower().strip()
     for m in MEDICINES:
         if m["name"].lower() == name or m["generic"].lower() == name:
             return m
     return None
+
 
 def find_medicine_by_barcode(barcode: str):
     barcode = barcode.strip()
@@ -181,25 +175,14 @@ def find_medicine_by_barcode(barcode: str):
             return m
     return None
 
-def check_interaction(drug_a: str, drug_b: str):
-    a = drug_a.lower().strip()
-    b = drug_b.lower().strip()
-    for i in INTERACTIONS:
-        da = i["drug_a"].lower()
-        db = i["drug_b"].lower()
-        if (da == a and db == b) or (da == b and db == a):
-            return i
-    return {
-        "drug_a": drug_a, "drug_b": drug_b, "severity": "SAFE",
-        "risk": "No known interaction in our database",
-        "action": "Safe to take together. Still consult doctor if unsure."
-    }
 
 def get_all_medicine_names():
     return [m["name"] for m in MEDICINES]
 
+
 def get_otc_medicines():
     return [m for m in MEDICINES if m["otc"]]
+
 
 def find_symptom(symptom_text: str):
     symptom_text = symptom_text.lower().strip()
